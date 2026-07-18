@@ -1,0 +1,13 @@
+# Example convert-to-md.toml
+# Place next to your project or in a parent directory.
+
+[convert-to-md]
+workers = 4
+use_cache = true
+pdf_ocr = "auto"
+pdf_formula_ocr = "auto"
+formula_ocr_engine = "auto"   # auto | pix2tex | tesseract
+html_keep_infobox = false
+pdf_page_headings = false
+# pdf_max_pages = 50
+# max_table_rows = 5000

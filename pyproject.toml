@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "convert-to-md"
+version = "0.5.3"
+description = "Local multi-format to Markdown converter (no LLM required)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "convert-to-md" }]
+dependencies = [
+  "typer>=0.12",
+  "rich>=13.0",
+  "python-docx>=1.1",
+  "python-pptx>=1.0",
+  "openpyxl>=3.1",
+  "beautifulsoup4>=4.12",
+  "markdownify>=0.13",
+  "lxml>=5.0",
+  "ebooklib>=0.18",
+  "pymupdf>=1.24",
+  "charset-normalizer>=3.3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+ocr = ["pytesseract>=0.3.10", "pillow>=10.0"]
+formula = ["pix2tex>=0.1.2", "pillow>=10.0", "torch>=2.0"]
+all = ["pytesseract>=0.3.10", "pillow>=10.0", "pix2tex>=0.1.2", "torch>=2.0"]
+
+[project.scripts]
+convert-to-md = "convert_to_md.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/convert_to_md"]
+
+# hatchling maps src/convert_to_md → convert_to_md
+[tool.hatch.build.targets.sdist]
+include = ["src/convert_to_md", "README.md", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
