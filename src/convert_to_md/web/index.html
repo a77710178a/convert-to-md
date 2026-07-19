@@ -124,6 +124,22 @@
     .batch-item .name { color: #cfe0f7; font-weight: 600; }
     .batch-item .ok { color: var(--ok); }
     .batch-item .fail { color: var(--danger); }
+    .progress {
+      margin-top: 10px;
+      height: 10px;
+      background: #0c1118;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+      display: none;
+    }
+    .progress > i {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #4f8dff, #3ac7b8);
+      transition: width .2s ease;
+    }
     pre {
       margin: 0;
       white-space: pre-wrap;
@@ -198,6 +214,7 @@
           <button class="primary" id="btnDownload" disabled>批量转换下载</button>
           <button class="ghost" id="btnClear" type="button">清空</button>
         </div>
+        <div class="progress" id="progress"><i id="progressBar"></i></div>
         <div class="status" id="status">就绪</div>
       </section>
 
@@ -211,7 +228,7 @@
     <footer>
       CLI：<code>convert-to-md file.docx</code> ·
       Web：<code>convert-to-md serve</code> ·
-      批量接口：<code>/api/convert-batch</code>
+      批量进度：<code>/api/jobs</code>
     </footer>
   </div>
 
@@ -226,11 +243,38 @@
     const batch = $("batch");
     const btnPreview = $("btnPreview");
     const btnDownload = $("btnDownload");
+    const progress = $("progress");
+    const progressBar = $("progressBar");
     let selected = [];
+    let pollTimer = null;
 
     function setStatus(text, kind="") {
       statusEl.textContent = text;
       statusEl.className = "status" + (kind ? " " + kind : "");
+    }
+
+    function setProgress(done, total) {
+      if (!total) {
+        progress.style.display = "none";
+        progressBar.style.width = "0%";
+        return;
+      }
+      progress.style.display = "block";
+      const pct = Math.max(0, Math.min(100, Math.round((done / total) * 100)));
+      progressBar.style.width = pct + "%";
+    }
+
+    function renderJobResults(job) {
+      const items = job.results || [];
+      batch.innerHTML = items.map(r => {
+        if (r.ok) {
+          return `<div class="batch-item"><div class="name">${r.filename}</div><div class="ok">OK → ${r.markdown_name} · ${r.lines} lines · ${r.assets} assets</div></div>`;
+        }
+        return `<div class="batch-item"><div class="name">${r.filename}</div><div class="fail">FAIL: ${r.error || "unknown"}</div></div>`;
+      }).join("");
+      if (job.current) {
+        setStatus(`正在转换：${job.current}（${job.done}/${job.total}）`);
+      }
     }
 
     function renderList() {
@@ -265,10 +309,12 @@
     $("btnClear").addEventListener("click", () => {
       selected = [];
       fileInput.value = "";
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
       renderList();
       preview.textContent = "转换结果预览会显示在这里。";
       meta.innerHTML = "";
       batch.innerHTML = "";
+      setProgress(0, 0);
       setStatus("就绪");
     });
 
@@ -319,52 +365,120 @@
       }
     });
 
+    async function downloadUrl(url, fallbackName) {
+      const r = await fetch(url);
+      if (!r.ok) {
+        let detail = r.statusText;
+        try {
+          const j = await r.json();
+          detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail || detail);
+        } catch {}
+        throw new Error(detail);
+      }
+      const blob = await r.blob();
+      const name = r.headers.get("X-Output-Name") || fallbackName;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+      return { name, ok: r.headers.get("X-Convert-Ok"), failed: r.headers.get("X-Convert-Failed") };
+    }
+
+    async function runBatchWithProgress() {
+      const fd = new FormData();
+      for (const f of selected) fd.append("files", f);
+      appendOptions(fd);
+      const created = await fetch("/api/jobs", { method: "POST", body: fd });
+      const createdBody = await created.json();
+      if (!created.ok) {
+        const detail = typeof createdBody.detail === "string"
+          ? createdBody.detail
+          : JSON.stringify(createdBody.detail || created.statusText);
+        throw new Error(detail);
+      }
+      const jobId = createdBody.job.id;
+      setProgress(0, createdBody.job.total || selected.length);
+      setStatus(`任务已创建：${jobId}`);
+
+      return await new Promise((resolve, reject) => {
+        if (pollTimer) clearInterval(pollTimer);
+        const tick = async () => {
+          try {
+            const r = await fetch(`/api/jobs/${jobId}`);
+            const j = await r.json();
+            if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : "job poll failed");
+            const job = j.job;
+            setProgress(job.done || 0, job.total || selected.length);
+            renderJobResults(job);
+            meta.innerHTML = [
+              `job: ${job.id}`,
+              `status: ${job.status}`,
+              `done: ${job.done}/${job.total}`,
+              `ok: ${job.ok}`,
+              `failed: ${job.failed}`,
+            ].map(t => `<span class="chip">${t}</span>`).join("");
+            if (job.status === "done") {
+              clearInterval(pollTimer); pollTimer = null;
+              const dl = await downloadUrl(`/api/jobs/${jobId}/download`, "convert_to_md_batch.zip");
+              preview.textContent = "批量结果已下载。可打开 zip 中的 SUMMARY.md 查看每个文件状态。";
+              resolve(dl);
+            } else if (job.status === "error") {
+              clearInterval(pollTimer); pollTimer = null;
+              reject(new Error(job.error || "batch job failed"));
+            }
+          } catch (e) {
+            clearInterval(pollTimer); pollTimer = null;
+            reject(e);
+          }
+        };
+        tick();
+        pollTimer = setInterval(tick, 700);
+      });
+    }
+
     btnDownload.addEventListener("click", async () => {
       if (!selected.length) return;
       setStatus(selected.length > 1 ? `批量转换 ${selected.length} 个文件…` : "转换并下载…");
       btnPreview.disabled = true; btnDownload.disabled = true;
       try {
-        let r, name;
         if (selected.length === 1) {
           const fd = new FormData();
           fd.append("file", selected[0]);
           appendOptions(fd);
-          r = await fetch("/api/convert", { method: "POST", body: fd });
+          setProgress(0, 1);
+          const r = await fetch("/api/convert", { method: "POST", body: fd });
+          if (!r.ok) {
+            let detail = r.statusText;
+            try {
+              const j = await r.json();
+              detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail || detail);
+            } catch {}
+            throw new Error(detail);
+          }
+          const blob = await r.blob();
+          const name = r.headers.get("X-Output-Name") || (selected[0].name + ".md");
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = name;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(a.href);
+          setProgress(1, 1);
+          meta.innerHTML = [`download: ${name}`].map(t => `<span class="chip">${t}</span>`).join("");
+          setStatus(`下载完成：${name}`, "ok");
         } else {
-          const fd = new FormData();
-          for (const f of selected) fd.append("files", f);
-          appendOptions(fd);
-          r = await fetch("/api/convert-batch", { method: "POST", body: fd });
+          const dl = await runBatchWithProgress();
+          meta.innerHTML = [
+            `download: ${dl.name}`,
+            dl.ok != null ? `ok: ${dl.ok}` : null,
+            dl.failed != null ? `failed: ${dl.failed}` : null,
+          ].filter(Boolean).map(t => `<span class="chip">${t}</span>`).join("");
+          setStatus(`下载完成：${dl.name}`, "ok");
         }
-        if (!r.ok) {
-          let detail = r.statusText;
-          try {
-            const j = await r.json();
-            detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail || detail);
-          } catch {}
-          throw new Error(detail);
-        }
-        const blob = await r.blob();
-        name = r.headers.get("X-Output-Name") || (selected.length > 1 ? "convert_to_md_batch.zip" : (selected[0].name + ".md"));
-        const okN = r.headers.get("X-Convert-Ok");
-        const failN = r.headers.get("X-Convert-Failed");
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(a.href);
-        meta.innerHTML = [
-          `download: ${name}`,
-          okN != null ? `ok: ${okN}` : null,
-          failN != null ? `failed: ${failN}` : null,
-        ].filter(Boolean).map(t => `<span class="chip">${t}</span>`).join("");
-        if (selected.length > 1) {
-          batch.innerHTML = `<div class="batch-item"><span class="ok">批量完成</span>：已下载 zip（含 SUMMARY.md）</div>`;
-          preview.textContent = "批量结果已下载。可打开 zip 中的 SUMMARY.md 查看每个文件状态。";
-        }
-        setStatus(`下载完成：${name}`, "ok");
       } catch (e) {
         setStatus(String(e.message || e), "err");
       } finally {

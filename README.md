@@ -125,4 +125,4 @@ See `PUBLISH.md` for PyPI build/upload steps.
 
 ## Version
 
-0.6.1
+0.6.2
