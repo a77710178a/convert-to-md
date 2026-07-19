@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>convert-to-md</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --panel2: #243044;
+      --text: #e7eef8;
+      --muted: #9bb0c9;
+      --accent: #5b9dff;
+      --accent2: #3dd6c6;
+      --danger: #ff6b7a;
+      --ok: #5ddea0;
+      --border: #334155;
+      --shadow: 0 12px 40px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #1d3b66 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #164e4a 0%, transparent 50%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 28px 18px 60px; }
+    header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 22px; }
+    h1 { margin: 0 0 6px; font-size: 1.55rem; letter-spacing: .2px; }
+    .sub { color: var(--muted); font-size: .95rem; line-height: 1.45; }
+    .badge {
+      background: rgba(91,157,255,.12);
+      border: 1px solid rgba(91,157,255,.35);
+      color: #b9d5ff;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: .82rem;
+      white-space: nowrap;
+    }
+    .grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 16px; }
+    @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.03), transparent 40%), var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+    .drop {
+      border: 1.5px dashed #4b6280;
+      border-radius: 14px;
+      padding: 28px 16px;
+      text-align: center;
+      background: rgba(15,20,25,.35);
+      transition: .15s ease;
+      cursor: pointer;
+    }
+    .drop.drag { border-color: var(--accent2); background: rgba(61,214,198,.08); }
+    .drop strong { display: block; margin-bottom: 6px; }
+    .drop span { color: var(--muted); font-size: .9rem; }
+    .file-name { margin-top: 10px; color: #cfe0f7; font-size: .92rem; word-break: break-all; }
+    .opts { display: grid; gap: 10px; margin-top: 14px; }
+    label { display: grid; gap: 4px; font-size: .86rem; color: var(--muted); }
+    select, button {
+      font: inherit;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      color: var(--text);
+      padding: 10px 12px;
+    }
+    select { width: 100%; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 560px) { .row { grid-template-columns: 1fr; } }
+    .checks { display: flex; flex-wrap: wrap; gap: 12px 16px; margin-top: 4px; }
+    .checks label { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: .9rem; }
+    .actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+    button.primary {
+      background: linear-gradient(135deg, #4f8dff, #3ac7b8);
+      border: none;
+      color: #061018;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button.primary:disabled { opacity: .55; cursor: not-allowed; }
+    button.ghost { background: transparent; cursor: pointer; }
+    .status { min-height: 1.2em; margin-top: 10px; font-size: .9rem; color: var(--muted); }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--danger); }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+    .chip {
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: .8rem;
+      color: var(--muted);
+    }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #0c1118;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      max-height: 520px;
+      overflow: auto;
+      font-size: .84rem;
+      line-height: 1.45;
+      color: #d7e5f8;
+    }
+    footer { margin-top: 18px; color: var(--muted); font-size: .82rem; }
+    code { color: #b7f0e5; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>convert-to-md</h1>
+        <div class="sub">本地文件转 Markdown · 规则优先 · 不走大模型热路径</div>
+      </div>
+      <div class="badge" id="ver">loading…</div>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <div class="drop" id="drop">
+          <strong>拖拽文件到这里，或点击选择</strong>
+          <span>支持 docx/pptx/xlsx/html/pdf/epub/图片/csv/json…（单文件，最大约 80MB）</span>
+          <div class="file-name" id="fname">未选择文件</div>
+          <input type="file" id="file" hidden />
+        </div>
+
+        <div class="opts">
+          <div class="row">
+            <label>PDF 全文 OCR
+              <select id="pdf_ocr">
+                <option value="auto" selected>auto</option>
+                <option value="off">off</option>
+                <option value="force">force</option>
+              </select>
+            </label>
+            <label>PDF 公式图 OCR
+              <select id="pdf_formula_ocr">
+                <option value="auto" selected>auto</option>
+                <option value="off">off</option>
+                <option value="force">force</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label>公式 OCR 引擎
+              <select id="formula_ocr_engine">
+                <option value="auto" selected>auto</option>
+                <option value="pix2tex">pix2tex</option>
+                <option value="tesseract">tesseract</option>
+              </select>
+            </label>
+            <div class="checks" style="align-content:end; padding-bottom:4px;">
+              <label><input type="checkbox" id="pdf_page_headings" /> PDF 页码标题</label>
+              <label><input type="checkbox" id="html_keep_infobox" /> 保留 HTML infobox</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="primary" id="btnPreview" disabled>预览 Markdown</button>
+          <button class="primary" id="btnDownload" disabled>转换并下载</button>
+          <button class="ghost" id="btnClear" type="button">清空</button>
+        </div>
+        <div class="status" id="status">就绪</div>
+      </section>
+
+      <section class="card">
+        <div class="meta" id="meta"></div>
+        <pre id="preview">转换结果预览会显示在这里。</pre>
+      </section>
+    </div>
+
+    <footer>
+      CLI 同样可用：<code>convert-to-md file.docx</code> ·
+      Web：<code>convert-to-md serve</code> ·
+      引擎信息来自 <code>/api/health</code>
+    </footer>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const drop = $("drop");
+    const fileInput = $("file");
+    const fname = $("fname");
+    const statusEl = $("status");
+    const preview = $("preview");
+    const meta = $("meta");
+    const btnPreview = $("btnPreview");
+    const btnDownload = $("btnDownload");
+    let selected = null;
+
+    function setStatus(text, kind="") {
+      statusEl.textContent = text;
+      statusEl.className = "status" + (kind ? " " + kind : "");
+    }
+
+    function setFile(file) {
+      selected = file || null;
+      fname.textContent = selected ? `${selected.name} (${Math.round(selected.size/1024)} KB)` : "未选择文件";
+      btnPreview.disabled = !selected;
+      btnDownload.disabled = !selected;
+    }
+
+    drop.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
+    ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => {
+      e.preventDefault(); drop.classList.add("drag");
+    }));
+    ["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => {
+      e.preventDefault(); drop.classList.remove("drag");
+    }));
+    drop.addEventListener("drop", e => {
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) setFile(f);
+    });
+
+    $("btnClear").addEventListener("click", () => {
+      setFile(null);
+      fileInput.value = "";
+      preview.textContent = "转换结果预览会显示在这里。";
+      meta.innerHTML = "";
+      setStatus("就绪");
+    });
+
+    function formData() {
+      const fd = new FormData();
+      fd.append("file", selected);
+      fd.append("pdf_ocr", $("pdf_ocr").value);
+      fd.append("pdf_formula_ocr", $("pdf_formula_ocr").value);
+      fd.append("formula_ocr_engine", $("formula_ocr_engine").value);
+      fd.append("pdf_page_headings", $("pdf_page_headings").checked ? "true" : "false");
+      fd.append("html_keep_infobox", $("html_keep_infobox").checked ? "true" : "false");
+      return fd;
+    }
+
+    async function loadHealth() {
+      try {
+        const r = await fetch("/api/health");
+        const j = await r.json();
+        $("ver").textContent = `v${j.version} · page OCR: ${(j.page_ocr||[]).join(",")||"none"} · formula: ${(j.formula_ocr||[]).join(",")||"none"}`;
+      } catch {
+        $("ver").textContent = "offline";
+      }
+    }
+
+    btnPreview.addEventListener("click", async () => {
+      if (!selected) return;
+      setStatus("转换预览中…");
+      btnPreview.disabled = true; btnDownload.disabled = true;
+      try {
+        const r = await fetch("/api/convert-preview", { method: "POST", body: formData() });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.detail || r.statusText);
+        meta.innerHTML = [
+          `kind: ${j.kind}`,
+          `lines: ${j.lines}`,
+          `chars: ${j.chars}`,
+          `assets: ${j.assets}`,
+        ].map(t => `<span class="chip">${t}</span>`).join("");
+        preview.textContent = j.preview || "";
+        setStatus("预览完成", "ok");
+      } catch (e) {
+        setStatus(String(e.message || e), "err");
+      } finally {
+        btnPreview.disabled = !selected; btnDownload.disabled = !selected;
+      }
+    });
+
+    btnDownload.addEventListener("click", async () => {
+      if (!selected) return;
+      setStatus("转换并打包下载中…");
+      btnPreview.disabled = true; btnDownload.disabled = true;
+      try {
+        const r = await fetch("/api/convert", { method: "POST", body: formData() });
+        if (!r.ok) {
+          let detail = r.statusText;
+          try { const j = await r.json(); detail = j.detail || detail; } catch {}
+          throw new Error(detail);
+        }
+        const blob = await r.blob();
+        const name = r.headers.get("X-Output-Name") || (selected.name + ".md");
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+        setStatus(`下载完成：${name}`, "ok");
+      } catch (e) {
+        setStatus(String(e.message || e), "err");
+      } finally {
+        btnPreview.disabled = !selected; btnDownload.disabled = !selected;
+      }
+    });
+
+    loadHealth();
+  </script>
+</body>
+</html>

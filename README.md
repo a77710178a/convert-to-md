@@ -16,6 +16,9 @@ pip install -e ".[ocr,dev]"
 # optional specialized formula OCR (heavier: torch + pix2tex)
 pip install -e ".[formula]"
 
+# optional local web UI
+pip install -e ".[web]"
+
 # everything
 pip install -e ".[all,dev]"
 ```
@@ -31,6 +34,10 @@ convert-to-md paper.pdf --pdf-formula-ocr force
 convert-to-md formula.png --formula-ocr-engine pix2tex
 convert-to-md page.html --html-keep-infobox
 convert-to-md formats
+
+# local web UI (browser)
+convert-to-md serve
+# open http://127.0.0.1:8765/
 ```
 
 ### Config file (optional)
@@ -109,4 +116,4 @@ convert-to-md samples/raw -o samples/out -j 4 --no-cache
 
 ## Version
 
-0.5.3
+0.6.0

@@ -16,8 +16,9 @@ pip install -e ".[dev,ocr]"
 |-------|----------|---------|
 | `ocr` | pytesseract, pillow | page / image OCR (needs system Tesseract) |
 | `formula` | pix2tex, torch, pillow | specialized formula → LaTeX |
-| `all` | ocr + formula | full optional stack |
-| `dev` | pytest | tests |
+| `web` | fastapi, uvicorn, python-multipart | local browser UI (`convert-to-md serve`) |
+| `all` | ocr + formula + web | full optional stack |
+| `dev` | pytest, httpx | tests |
 
 ## Config
 

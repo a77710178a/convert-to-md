@@ -211,7 +211,27 @@ def formats_cmd() -> None:
     )
 
 
-_COMMANDS = {"convert", "formats"}
+@app.command("serve")
+def serve_cmd(
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind host."),
+    port: int = typer.Option(8765, "--port", "-p", help="Bind port."),
+    reload: bool = typer.Option(False, "--reload", help="Auto-reload (dev only)."),
+) -> None:
+    """Start local web UI (requires optional web extra)."""
+    try:
+        import uvicorn
+    except ImportError as e:
+        console.print(
+            "[red]Web UI dependencies missing.[/red] Install with: "
+            "[bold]pip install -e \".[web]\"[/bold]"
+        )
+        raise typer.Exit(code=1) from e
+
+    console.print(f"Open http://{host}:{port}/  (Ctrl+C to stop)")
+    uvicorn.run("convert_to_md.webapp:app", host=host, port=port, reload=reload)
+
+
+_COMMANDS = {"convert", "formats", "serve"}
 _ROOT_FLAGS = {"-h", "--help", "-V", "--version"}
 
 
