@@ -29,7 +29,7 @@
       color: var(--text);
       min-height: 100vh;
     }
-    .wrap { max-width: 980px; margin: 0 auto; padding: 28px 18px 60px; }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 28px 18px 60px; }
     header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 22px; }
     h1 { margin: 0 0 6px; font-size: 1.55rem; letter-spacing: .2px; }
     .sub { color: var(--muted); font-size: .95rem; line-height: 1.45; }
@@ -42,8 +42,8 @@
       font-size: .82rem;
       white-space: nowrap;
     }
-    .grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 16px; }
-    @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+    .grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 16px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
     .card {
       background: linear-gradient(180deg, rgba(255,255,255,.03), transparent 40%), var(--panel);
       border: 1px solid var(--border);
@@ -63,7 +63,19 @@
     .drop.drag { border-color: var(--accent2); background: rgba(61,214,198,.08); }
     .drop strong { display: block; margin-bottom: 6px; }
     .drop span { color: var(--muted); font-size: .9rem; }
-    .file-name { margin-top: 10px; color: #cfe0f7; font-size: .92rem; word-break: break-all; }
+    .file-list {
+      margin-top: 12px;
+      text-align: left;
+      max-height: 160px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #0c1118;
+      padding: 8px 10px;
+      font-size: .86rem;
+    }
+    .file-list:empty::before { content: "未选择文件"; color: var(--muted); }
+    .file-list div { padding: 3px 0; color: #cfe0f7; word-break: break-all; }
     .opts { display: grid; gap: 10px; margin-top: 14px; }
     label { display: grid; gap: 4px; font-size: .86rem; color: var(--muted); }
     select, button {
@@ -101,6 +113,17 @@
       font-size: .8rem;
       color: var(--muted);
     }
+    .batch-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      background: #0c1118;
+      font-size: .86rem;
+    }
+    .batch-item .name { color: #cfe0f7; font-weight: 600; }
+    .batch-item .ok { color: var(--ok); }
+    .batch-item .fail { color: var(--danger); }
     pre {
       margin: 0;
       white-space: pre-wrap;
@@ -109,7 +132,7 @@
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 12px;
-      max-height: 520px;
+      max-height: 460px;
       overflow: auto;
       font-size: .84rem;
       line-height: 1.45;
@@ -124,7 +147,7 @@
     <header>
       <div>
         <h1>convert-to-md</h1>
-        <div class="sub">本地文件转 Markdown · 规则优先 · 不走大模型热路径</div>
+        <div class="sub">本地文件转 Markdown · 支持多文件批量 · 规则优先</div>
       </div>
       <div class="badge" id="ver">loading…</div>
     </header>
@@ -133,9 +156,9 @@
       <section class="card">
         <div class="drop" id="drop">
           <strong>拖拽文件到这里，或点击选择</strong>
-          <span>支持 docx/pptx/xlsx/html/pdf/epub/图片/csv/json…（单文件，最大约 80MB）</span>
-          <div class="file-name" id="fname">未选择文件</div>
-          <input type="file" id="file" hidden />
+          <span>支持多文件（最多 30 个，总计约 200MB；单文件约 80MB）</span>
+          <div class="file-list" id="flist"></div>
+          <input type="file" id="file" multiple hidden />
         </div>
 
         <div class="opts">
@@ -171,8 +194,8 @@
         </div>
 
         <div class="actions">
-          <button class="primary" id="btnPreview" disabled>预览 Markdown</button>
-          <button class="primary" id="btnDownload" disabled>转换并下载</button>
+          <button class="primary" id="btnPreview" disabled>预览首个文件</button>
+          <button class="primary" id="btnDownload" disabled>批量转换下载</button>
           <button class="ghost" id="btnClear" type="button">清空</button>
         </div>
         <div class="status" id="status">就绪</div>
@@ -180,14 +203,15 @@
 
       <section class="card">
         <div class="meta" id="meta"></div>
+        <div id="batch"></div>
         <pre id="preview">转换结果预览会显示在这里。</pre>
       </section>
     </div>
 
     <footer>
-      CLI 同样可用：<code>convert-to-md file.docx</code> ·
+      CLI：<code>convert-to-md file.docx</code> ·
       Web：<code>convert-to-md serve</code> ·
-      引擎信息来自 <code>/api/health</code>
+      批量接口：<code>/api/convert-batch</code>
     </footer>
   </div>
 
@@ -195,28 +219,39 @@
     const $ = (id) => document.getElementById(id);
     const drop = $("drop");
     const fileInput = $("file");
-    const fname = $("fname");
+    const flist = $("flist");
     const statusEl = $("status");
     const preview = $("preview");
     const meta = $("meta");
+    const batch = $("batch");
     const btnPreview = $("btnPreview");
     const btnDownload = $("btnDownload");
-    let selected = null;
+    let selected = [];
 
     function setStatus(text, kind="") {
       statusEl.textContent = text;
       statusEl.className = "status" + (kind ? " " + kind : "");
     }
 
-    function setFile(file) {
-      selected = file || null;
-      fname.textContent = selected ? `${selected.name} (${Math.round(selected.size/1024)} KB)` : "未选择文件";
-      btnPreview.disabled = !selected;
-      btnDownload.disabled = !selected;
+    function renderList() {
+      flist.innerHTML = selected.map((f, i) =>
+        `<div>${i+1}. ${f.name} <span style="color:#9bb0c9">(${Math.round(f.size/1024)} KB)</span></div>`
+      ).join("");
+      btnPreview.disabled = selected.length === 0;
+      btnDownload.disabled = selected.length === 0;
+    }
+
+    function setFiles(fileList) {
+      const arr = Array.from(fileList || []);
+      // de-dup by name+size
+      const map = new Map(selected.map(f => [`${f.name}:${f.size}`, f]));
+      for (const f of arr) map.set(`${f.name}:${f.size}`, f);
+      selected = Array.from(map.values()).slice(0, 30);
+      renderList();
     }
 
     drop.addEventListener("click", () => fileInput.click());
-    fileInput.addEventListener("change", () => setFile(fileInput.files[0]));
+    fileInput.addEventListener("change", () => setFiles(fileInput.files));
     ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => {
       e.preventDefault(); drop.classList.add("drag");
     }));
@@ -224,21 +259,20 @@
       e.preventDefault(); drop.classList.remove("drag");
     }));
     drop.addEventListener("drop", e => {
-      const f = e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) setFile(f);
+      if (e.dataTransfer.files) setFiles(e.dataTransfer.files);
     });
 
     $("btnClear").addEventListener("click", () => {
-      setFile(null);
+      selected = [];
       fileInput.value = "";
+      renderList();
       preview.textContent = "转换结果预览会显示在这里。";
       meta.innerHTML = "";
+      batch.innerHTML = "";
       setStatus("就绪");
     });
 
-    function formData() {
-      const fd = new FormData();
-      fd.append("file", selected);
+    function appendOptions(fd) {
       fd.append("pdf_ocr", $("pdf_ocr").value);
       fd.append("pdf_formula_ocr", $("pdf_formula_ocr").value);
       fd.append("formula_ocr_engine", $("formula_ocr_engine").value);
@@ -258,41 +292,62 @@
     }
 
     btnPreview.addEventListener("click", async () => {
-      if (!selected) return;
-      setStatus("转换预览中…");
+      if (!selected.length) return;
+      setStatus("预览首个文件…");
       btnPreview.disabled = true; btnDownload.disabled = true;
       try {
-        const r = await fetch("/api/convert-preview", { method: "POST", body: formData() });
+        const fd = new FormData();
+        fd.append("file", selected[0]);
+        appendOptions(fd);
+        const r = await fetch("/api/convert-preview", { method: "POST", body: fd });
         const j = await r.json();
-        if (!r.ok) throw new Error(j.detail || r.statusText);
+        if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail || r.statusText));
         meta.innerHTML = [
+          `file: ${j.filename}`,
           `kind: ${j.kind}`,
           `lines: ${j.lines}`,
           `chars: ${j.chars}`,
           `assets: ${j.assets}`,
         ].map(t => `<span class="chip">${t}</span>`).join("");
+        batch.innerHTML = "";
         preview.textContent = j.preview || "";
         setStatus("预览完成", "ok");
       } catch (e) {
         setStatus(String(e.message || e), "err");
       } finally {
-        btnPreview.disabled = !selected; btnDownload.disabled = !selected;
+        btnPreview.disabled = !selected.length; btnDownload.disabled = !selected.length;
       }
     });
 
     btnDownload.addEventListener("click", async () => {
-      if (!selected) return;
-      setStatus("转换并打包下载中…");
+      if (!selected.length) return;
+      setStatus(selected.length > 1 ? `批量转换 ${selected.length} 个文件…` : "转换并下载…");
       btnPreview.disabled = true; btnDownload.disabled = true;
       try {
-        const r = await fetch("/api/convert", { method: "POST", body: formData() });
+        let r, name;
+        if (selected.length === 1) {
+          const fd = new FormData();
+          fd.append("file", selected[0]);
+          appendOptions(fd);
+          r = await fetch("/api/convert", { method: "POST", body: fd });
+        } else {
+          const fd = new FormData();
+          for (const f of selected) fd.append("files", f);
+          appendOptions(fd);
+          r = await fetch("/api/convert-batch", { method: "POST", body: fd });
+        }
         if (!r.ok) {
           let detail = r.statusText;
-          try { const j = await r.json(); detail = j.detail || detail; } catch {}
+          try {
+            const j = await r.json();
+            detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail || detail);
+          } catch {}
           throw new Error(detail);
         }
         const blob = await r.blob();
-        const name = r.headers.get("X-Output-Name") || (selected.name + ".md");
+        name = r.headers.get("X-Output-Name") || (selected.length > 1 ? "convert_to_md_batch.zip" : (selected[0].name + ".md"));
+        const okN = r.headers.get("X-Convert-Ok");
+        const failN = r.headers.get("X-Convert-Failed");
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = name;
@@ -300,11 +355,20 @@
         a.click();
         a.remove();
         URL.revokeObjectURL(a.href);
+        meta.innerHTML = [
+          `download: ${name}`,
+          okN != null ? `ok: ${okN}` : null,
+          failN != null ? `failed: ${failN}` : null,
+        ].filter(Boolean).map(t => `<span class="chip">${t}</span>`).join("");
+        if (selected.length > 1) {
+          batch.innerHTML = `<div class="batch-item"><span class="ok">批量完成</span>：已下载 zip（含 SUMMARY.md）</div>`;
+          preview.textContent = "批量结果已下载。可打开 zip 中的 SUMMARY.md 查看每个文件状态。";
+        }
         setStatus(`下载完成：${name}`, "ok");
       } catch (e) {
         setStatus(String(e.message || e), "err");
       } finally {
-        btnPreview.disabled = !selected; btnDownload.disabled = !selected;
+        btnPreview.disabled = !selected.length; btnDownload.disabled = !selected.length;
       }
     });
 

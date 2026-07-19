@@ -61,3 +61,21 @@ def test_web_convert_download_md(client):
     assert r.status_code == 200, r.text
     assert "Ada" in r.text or "age" in r.text
     assert "markdown" in (r.headers.get("content-type") or "") or r.content
+
+
+def test_web_convert_batch_zip(client):
+    files = [
+        ("files", ("a.json", b'{"a":1}', "application/json")),
+        ("files", ("b.csv", b"x,y\n1,2\n", "text/csv")),
+    ]
+    data = {
+        "pdf_ocr": "off",
+        "pdf_formula_ocr": "off",
+        "formula_ocr_engine": "auto",
+    }
+    r = client.post("/api/convert-batch", files=files, data=data)
+    assert r.status_code == 200, r.text
+    assert r.headers.get("content-type", "").startswith("application/zip")
+    assert r.headers.get("X-Convert-Ok") == "2"
+    assert r.headers.get("X-Convert-Failed") == "0"
+    assert r.content[:2] == b"PK"

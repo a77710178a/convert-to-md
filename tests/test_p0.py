@@ -335,7 +335,7 @@ def test_html_mathml_and_latex(tmp_path: Path):
     )
     out = convert_file(src, tmp_path, use_cache=False)
     text = out.read_text(encoding="utf-8")
-    assert "$E=mc^2$" in text or "$E = mc^2$" in text or "E=mc^2" in text
+    assert "$E=mc^2$" in text or "$E = mc^2$" in text or "E=mc^2" in text or "E=mc^{2}" in text
     assert "$$" in text
     assert "a+b" in text
     assert "\\sum" in text or "sum" in text
@@ -436,6 +436,13 @@ def test_pretty_aligned_latex():
     md2 = latex_to_markdown(nested, display=True)
     assert md2.count("$$") == 2
     assert "\\$i\\$" in md2 or r"\$i\$" in md2
+
+
+def test_postprocess_formula_latex():
+    from convert_to_md.mathutil import postprocess_formula_latex
+
+    assert postprocess_formula_latex("E=m c^{2}") == "E=mc^{2}"
+    assert "underline" not in postprocess_formula_latex(r"x=\underline{{ac}}")
 
 
 def test_omml_integral_and_matrix():

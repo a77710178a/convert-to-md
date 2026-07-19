@@ -148,4 +148,10 @@ def _clean_pix2tex_latex(tex: str) -> str:
     tex = tex.replace("\n", " ")
     while "  " in tex:
         tex = tex.replace("  ", " ")
+    try:
+        from convert_to_md.mathutil import postprocess_formula_latex
+
+        tex = postprocess_formula_latex(tex)
+    except Exception:
+        pass
     return tex.strip()

@@ -114,6 +114,15 @@ detect → converter plugin → DocumentIR → GFM markdown + assets/
 convert-to-md samples/raw -o samples/out -j 4 --no-cache
 ```
 
+## Install from GitHub
+
+```bash
+pip install "git+https://github.com/a77710178a/convert-to-md.git"
+pip install "convert-to-md[web,ocr] @ git+https://github.com/a77710178a/convert-to-md.git"
+```
+
+See `PUBLISH.md` for PyPI build/upload steps.
+
 ## Version
 
-0.6.0
+0.6.1

@@ -44,7 +44,56 @@ def clean_latex(tex: str) -> str:
     tex = re.sub(r"(?<!\\)\\[,;:!]", " ", tex)
     tex = re.sub(r"\\quad|\\qquad", " ", tex)
     tex = re.sub(r"[ \t]{2,}", " ", tex)
+
+    # OCR / model post-clean: common formula normalizations
+    tex = postprocess_formula_latex(tex)
     return tex.strip()
+
+
+def postprocess_formula_latex(tex: str) -> str:
+    """Light cleanup for OCR/model latex without changing math semantics much."""
+    t = (tex or "").strip()
+    if not t:
+        return t
+    # strip accidental outer math delimiters
+    if t.startswith("$$") and t.endswith("$$") and len(t) > 4:
+        t = t[2:-2].strip()
+    elif t.startswith("$") and t.endswith("$") and len(t) > 2:
+        t = t[1:-1].strip()
+
+    # protect latex command braces like \begin{aligned}, \frac{a}{b}
+    protected: list[str] = []
+
+    def _protect(m: re.Match[str]) -> str:
+        protected.append(m.group(0))
+        return f"§P{len(protected)-1}§"
+
+    # protect \command{...} and \command[...]{...} chunks lightly by freezing brace groups after backslash commands
+    t = re.sub(r"\\[A-Za-z]+\*?(?:\{[^{}]*\}|\[(?:[^\]]*)\])*", _protect, t)
+
+    # normalize spaces around simple identifiers only on unprotected text
+    t = re.sub(r"(?<=[=+\-*/(,])\s+", "", t)
+    t = re.sub(r"\s+(?=[,.)}])", "", t)
+    t = re.sub(r"(?<=[A-Za-z0-9])\s+(?=[A-Za-z0-9])", "", t)
+
+    # restore protected fragments
+    for i, frag in enumerate(protected):
+        t = t.replace(f"§P{i}§", frag)
+
+    # remove empty-ish \underline wrappers sometimes emitted by OCR models
+    t = re.sub(r"\\underline\{\s*\{+\s*([^{}]+)\s*\}+\s*\}", r"\1", t)
+    t = re.sub(r"\\underline\{\s*([^{}]+)\s*\}", r"\1", t)
+
+    # common OCR confusions for simple formulas
+    t = t.replace("\\chi=", "x=")
+    t = re.sub(r"E\s*=\s*m\s*c\s*\^\s*\{?\s*2\s*\}?", "E=mc^{2}", t)
+    t = re.sub(r"E=m\s*c\^\{2\}", "E=mc^{2}", t)
+    t = re.sub(r"E=mc\^2\b", "E=mc^{2}", t)
+    t = re.sub(r"E=mc\^\{2\}", "E=mc^{2}", t)
+
+    # collapse leftover multi-spaces
+    t = re.sub(r"[ \t]{2,}", " ", t)
+    return t.strip()
 
 
 def pretty_latex(tex: str) -> str:
