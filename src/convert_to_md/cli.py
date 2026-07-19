@@ -216,6 +216,7 @@ def serve_cmd(
     host: str = typer.Option("127.0.0.1", "--host", help="Bind host."),
     port: int = typer.Option(8765, "--port", "-p", help="Bind port."),
     reload: bool = typer.Option(False, "--reload", help="Auto-reload (dev only)."),
+    open_browser: bool = typer.Option(True, "--open/--no-open", help="Open browser automatically."),
 ) -> None:
     """Start local web UI (requires optional web extra)."""
     try:
@@ -227,7 +228,22 @@ def serve_cmd(
         )
         raise typer.Exit(code=1) from e
 
-    console.print(f"Open http://{host}:{port}/  (Ctrl+C to stop)")
+    url = f"http://{host}:{port}/"
+    console.print(f"[green]convert-to-md web UI[/green]  {url}")
+    console.print("Drag & drop files, preview, batch convert with progress. Ctrl+C to stop.")
+    if open_browser and host in {"127.0.0.1", "localhost", "0.0.0.0"}:
+        import threading
+        import time
+        import webbrowser
+
+        def _open() -> None:
+            time.sleep(0.8)
+            try:
+                webbrowser.open(url.replace("0.0.0.0", "127.0.0.1"))
+            except Exception:
+                pass
+
+        threading.Thread(target=_open, daemon=True).start()
     uvicorn.run("convert_to_md.webapp:app", host=host, port=port, reload=reload)
 
 

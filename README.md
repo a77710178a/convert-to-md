@@ -35,9 +35,10 @@ convert-to-md formula.png --formula-ocr-engine pix2tex
 convert-to-md page.html --html-keep-infobox
 convert-to-md formats
 
-# local web UI (browser)
+# local web UI (browser; multi-file batch + progress)
 convert-to-md serve
-# open http://127.0.0.1:8765/
+# opens http://127.0.0.1:8765/
+# convert-to-md serve --no-open
 ```
 
 ### Config file (optional)
