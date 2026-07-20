@@ -34,6 +34,7 @@ convert-to-md paper.pdf --pdf-formula-ocr force
 convert-to-md formula.png --formula-ocr-engine pix2tex
 convert-to-md page.html --html-keep-infobox
 convert-to-md formats
+convert-to-md doctor
 
 # local web UI (browser; multi-file batch + progress)
 convert-to-md serve
@@ -126,4 +127,4 @@ See `PUBLISH.md` for PyPI build/upload steps.
 
 ## Version
 
-0.6.2
+0.6.3

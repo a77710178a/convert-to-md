@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.3
+
+- `convert-to-md doctor` environment diagnostics
+- `serve` auto-selects a free port when default is busy
+- README/docs polish for web batch progress
+
 ## 0.6.2
 
 - Web batch jobs with progress polling (`/api/jobs`, `/api/jobs/{id}`, download)

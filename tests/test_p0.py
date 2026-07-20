@@ -445,6 +445,13 @@ def test_postprocess_formula_latex():
     assert "underline" not in postprocess_formula_latex(r"x=\underline{{ac}}")
 
 
+def test_pick_port_helper():
+    from convert_to_md.cli import _pick_port
+
+    p = _pick_port("127.0.0.1", 8765)
+    assert isinstance(p, int) and p > 0
+
+
 def test_omml_integral_and_matrix():
     from docx.oxml import OxmlElement
     from convert_to_md.mathutil import omml_element_to_latex, qn_m

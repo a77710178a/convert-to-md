@@ -228,7 +228,11 @@ def serve_cmd(
         )
         raise typer.Exit(code=1) from e
 
-    url = f"http://{host}:{port}/"
+    bind_host = "127.0.0.1" if host == "0.0.0.0" else host
+    chosen = _pick_port(bind_host, port)
+    if chosen != port:
+        console.print(f"[yellow]Port {port} is busy, using {chosen} instead.[/yellow]")
+    url = f"http://{('127.0.0.1' if host == '0.0.0.0' else host)}:{chosen}/"
     console.print(f"[green]convert-to-md web UI[/green]  {url}")
     console.print("Drag & drop files, preview, batch convert with progress. Ctrl+C to stop.")
     if open_browser and host in {"127.0.0.1", "localhost", "0.0.0.0"}:
@@ -239,15 +243,75 @@ def serve_cmd(
         def _open() -> None:
             time.sleep(0.8)
             try:
-                webbrowser.open(url.replace("0.0.0.0", "127.0.0.1"))
+                webbrowser.open(url)
             except Exception:
                 pass
 
         threading.Thread(target=_open, daemon=True).start()
-    uvicorn.run("convert_to_md.webapp:app", host=host, port=port, reload=reload)
+    uvicorn.run("convert_to_md.webapp:app", host=host, port=chosen, reload=reload)
 
 
-_COMMANDS = {"convert", "formats", "serve"}
+@app.command("doctor")
+def doctor_cmd() -> None:
+    """Show environment/diagnostics for convert-to-md."""
+    import importlib.util
+    import platform
+    import shutil
+    import sys as _sys
+
+    from convert_to_md.converters import supported_kinds
+    from convert_to_md.formula_ocr import available_formula_engines
+    from convert_to_md.ocr import available_engines
+
+    console.print(f"[bold]convert-to-md[/bold] {__version__}")
+    console.print(f"Python: {_sys.version.split()[0]} ({platform.system()} {platform.machine()})")
+    console.print(f"Executable: {_sys.executable}")
+
+    table = Table(title="Optional components")
+    table.add_column("Component")
+    table.add_column("Status")
+    checks = [
+        ("fastapi", "web UI"),
+        ("uvicorn", "web server"),
+        ("pytesseract", "page/image OCR"),
+        ("PIL", "image support"),
+        ("pix2tex", "formula OCR model"),
+        ("torch", "formula OCR backend"),
+    ]
+    for mod, label in checks:
+        ok = importlib.util.find_spec(mod if mod != "PIL" else "PIL") is not None
+        table.add_row(f"{label} ({mod})", "[green]installed[/green]" if ok else "[yellow]missing[/yellow]")
+    console.print(table)
+
+    tess = shutil.which("tesseract")
+    console.print(f"Tesseract binary: {tess or 'not found on PATH'}")
+    console.print("Page OCR engines: " + (", ".join(available_engines()) or "none"))
+    console.print("Formula OCR engines: " + (", ".join(available_formula_engines()) or "none"))
+    kinds = ", ".join(sorted({k for _, ks in supported_kinds() for k in ks}))
+    console.print(f"Supported kinds: {kinds}")
+    console.print("Tip: install extras with [bold]pip install -e \".[web,ocr]\"[/bold]")
+
+
+def _pick_port(host: str, preferred: int) -> int:
+    import socket
+
+    def _can_bind(p: int) -> bool:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind((host, p))
+                return True
+            except OSError:
+                return False
+
+    if _can_bind(preferred):
+        return preferred
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((host, 0))
+        return int(s.getsockname()[1])
+
+
+_COMMANDS = {"convert", "formats", "serve", "doctor"}
 _ROOT_FLAGS = {"-h", "--help", "-V", "--version"}
 
 
